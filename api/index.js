@@ -8,36 +8,45 @@ const multer = require('multer');
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(cors());
+// Konfigurasi CORS agar bisa diakses dari domain frontend kamu
+app.use(cors({
+    origin: '*', // Di production ganti dengan 'https://ai.shanove.my.id'
+    methods: ['GET', 'POST']
+}));
+
 app.use(express.json());
+
+// --- CONFIG ---
+const CEREBRAS_API_KEY = "csk-mwxrfk94v8txn2nw2ym538hk38j6cm9vketfxrd9xcf6jc4t";
+const CEREBRAS_MODEL_ID = "qwen-3-235b-a22b-instruct-2507";
 
 // --- UTILS ---
 const rand = n => Array.from({ length: n }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
 
-// --- PUBLIC REST API ENDPOINT ---
-// Admin bisa menggunakan ini sebagai layanan API
-app.post('/api/v1/chat', async (req, res) => {
-    // Validasi API Key sederhana (Di production gunakan Database)
-    const apiKey = req.headers['authorization'];
-    if (!apiKey || !apiKey.startsWith('Bearer sk-shanove')) {
-        return res.status(401).json({ status: false, message: "Invalid API Key" });
-    }
+// --- AI LOGIC FUNCTIONS ---
 
-    const { model, query, prompt } = req.body;
-    
-    try {
-        if (model === 'worm') {
-            const result = await wormgptChat(query || prompt);
-            return res.json({ status: true, model: 'worm-gpt', result });
-        } else {
-            return res.status(400).json({ status: false, message: "Model not supported in this endpoint yet" });
-        }
-    } catch (e) {
-        return res.status(500).json({ status: false, message: e.message });
-    }
-});
+// 1. Shanove (Cerebras)
+async function shanoveChat(query, systemPrompt) {
+    const response = await fetch('https://api.cerebras.ai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${CEREBRAS_API_KEY}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model: CEREBRAS_MODEL_ID,
+            messages: [
+                { role: "system", content: systemPrompt || "Kamu adalah Shanove AI." },
+                { role: "user", content: query }
+            ],
+            max_completion_tokens: 1000
+        })
+    });
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || "Gagal mengambil respon.";
+}
 
-// --- WORM GPT LOGIC ---
+// 2. WormGPT
 async function wormgptChat(query) {
     const messageId = `${rand(8)}-${rand(4)}-${rand(4)}-${rand(4)}-${rand(12)}`;
     const userId = `${rand(8)}-${rand(4)}-${rand(4)}-${rand(4)}-${rand(12)}`;
@@ -62,7 +71,7 @@ async function wormgptChat(query) {
         })
     });
 
-    if (!res.ok) throw new Error(`API Error: ${res.status}`);
+    if (!res.ok) throw new Error(`WormGPT API Error: ${res.status}`);
     const raw = await res.text();
     let result = '';
     
@@ -75,10 +84,10 @@ async function wormgptChat(query) {
             if (json.type === 'text-delta' && json.delta) result += json.delta;
         } catch {}
     }
-    return result || 'No response generated.';
+    return result || 'No response.';
 }
 
-// --- NANO BANANA LOGIC ---
+// 3. Nano Banana
 const NANO_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36',
     'Origin': 'https://nano-banana-pro.co',
@@ -86,19 +95,21 @@ const NANO_HEADERS = {
 };
 
 async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
+    // a. Temp Mail
     const mailRes = await fetch('https://api.nekolabs.web.id/tools/tempmail/v1/create').then(r => r.json());
-    if(!mailRes.result) throw new Error("Gagal create email");
+    if(!mailRes.result) throw new Error("Gagal create email temp");
     const { email, sessionId } = mailRes.result;
 
+    // b. Register
     const password = 'Pass' + crypto.randomBytes(4).toString('hex') + '!';
     const name = 'User' + crypto.randomBytes(2).toString('hex');
-    
     await fetch('https://nano-banana-pro.co/api/auth/sign-up/email', {
         method: 'POST',
         headers: { ...NANO_HEADERS, 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, name })
     });
 
+    // c. Polling & Verify
     let verifyLink = null;
     for(let i=0; i<15; i++) {
         await new Promise(r => setTimeout(r, 3000));
@@ -115,9 +126,9 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
     const rawCookies = verifyRes.headers.raw()['set-cookie'];
     const cookie = rawCookies ? rawCookies.map(v => v.split(';')[0]).join('; ') : '';
 
+    // d. Upload Image
     const form = new FormData();
     form.append('files', imageBuffer, { filename: 'image.jpg', contentType: mimeType });
-    
     const upRes = await fetch('https://nano-banana-pro.co/api/storage/upload-image', {
         method: 'POST',
         headers: { ...NANO_HEADERS, 'Cookie': cookie, ...form.getHeaders() },
@@ -125,8 +136,9 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
     });
     const upJson = await upRes.json();
     const uploadedUrl = upJson?.data?.urls?.[0];
-    if(!uploadedUrl) throw new Error("Gagal upload gambar");
+    if(!uploadedUrl) throw new Error("Gagal upload gambar ke Nano Server");
 
+    // e. Generate
     const genRes = await fetch('https://nano-banana-pro.co/api/ai/generate', {
         method: 'POST',
         headers: { ...NANO_HEADERS, 'Content-Type': 'application/json', 'Cookie': cookie },
@@ -139,6 +151,7 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
     const taskId = genJson?.data?.id;
     if(!taskId) throw new Error("Gagal start task AI");
 
+    // f. Polling Result
     for(let i=0; i<15; i++) {
         await new Promise(r => setTimeout(r, 4000));
         const qRes = await fetch('https://nano-banana-pro.co/api/ai/query', {
@@ -168,29 +181,40 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
     throw new Error("Timeout generating image");
 }
 
-// --- ROUTES ---
-app.get('/', (req, res) => res.send('Shanove AI Engine v17 - Running'));
-
-app.post('/api/worm', async (req, res) => {
+// --- UNIFIED REST API ENDPOINT ---
+app.post('/api/v1/chat', upload.single('image'), async (req, res) => {
     try {
-        const { query } = req.body;
-        if (!query) return res.status(400).json({ error: 'Query required' });
-        const result = await wormgptChat(query);
-        res.json({ result });
+        const model = req.body.model || 'shanove';
+        const query = req.body.query || req.body.prompt; // Support both names
+        const system = req.body.system;
+
+        if (!query) return res.status(400).json({ status: false, error: 'Parameter "query" or "prompt" required' });
+
+        let result;
+        if (model === 'shanove') {
+            result = await shanoveChat(query, system);
+        } else if (model === 'worm') {
+            result = await wormgptChat(query);
+        } else if (model === 'nano') {
+            if (!req.file) return res.status(400).json({ status: false, error: 'File "image" required for nano model' });
+            result = await nanoBananaImg2Img(query, req.file.buffer, req.file.mimetype);
+        } else {
+            return res.status(400).json({ status: false, error: 'Invalid model. Use: shanove, worm, nano' });
+        }
+
+        res.json({
+            status: true,
+            model: model,
+            result: result
+        });
+
     } catch (e) {
-        res.status(500).json({ error: e.message });
+        res.status(500).json({ status: false, error: e.message });
     }
 });
 
-app.post('/api/nano', upload.single('image'), async (req, res) => {
-    try {
-        const { prompt } = req.body;
-        if (!req.file || !prompt) return res.status(400).json({ error: 'Image and prompt required' });
-        const result = await nanoBananaImg2Img(prompt, req.file.buffer, req.file.mimetype);
-        res.json({ result });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+app.get('/', (req, res) => {
+    res.json({ message: "Shanove AI API is Running", endpoints: { chat: "/api/v1/chat" } });
 });
 
 module.exports = app;
