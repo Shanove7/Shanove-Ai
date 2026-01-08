@@ -4,10 +4,13 @@ import {
   Loader2, Upload, Menu, X, MessageSquare, 
   Plus, MessageCircle, AlertTriangle, LogOut, 
   Check, Sparkles, Terminal, Key, LayoutDashboard,
-  Home, Heart, Instagram, Shield, Search, Edit2, Save, Play, Edit3
+  Home, Heart, Instagram, Shield, Search, Edit2, Save, Play, Book, FileJson
 } from 'lucide-react';
 
-const BACKEND_URL = ""; // Empty = Relative path to Vercel Backend
+// --- CONFIGURATION ---
+const BACKEND_URL = ""; 
+const CEREBRAS_API_KEY = "csk-mwxrfk94v8txn2nw2ym538hk38j6cm9vketfxrd9xcf6jc4t";
+const CEREBRAS_MODEL_ID = "qwen-3-235b-a22b-instruct-2507";
 
 const EMAIL_CONFIG = {
     SERVICE_ID: "service_rlpso0c",
@@ -17,19 +20,33 @@ const EMAIL_CONFIG = {
 
 const APP_INFO = {
     name: "Shanove AI",
-    version: "v27.0 Final",
+    version: "v29.0 Final",
     logo_url: "https://raw.githubusercontent.com/Shanove7/Shanove-Ai/refs/heads/main/1764308690923.jpg",
     wa_url: "https://wa.me/6285185032092",
     ig_url: "https://instagram.com/shanv.konv",
-    admin_email: "kasannudin29@gmail.com"
+    admin_email: "kasannudin29@gmail.com",
+    api_domain: "https://ai.shanove.my.id"
 };
 
 const LIMITS = { GUEST: 3, USER: 50, ADMIN: 999999 };
+const SYSTEM_PROMPT = "Nama: Shanove AI. Sifat: Asisten Cerdas. Bahasa: Indonesia. Format: Gunakan **bold** untuk poin penting.";
 
 // --- UTILS ---
 const safeParse = (key, fallback) => {
     try { return JSON.parse(localStorage.getItem(key)) || fallback; } 
     catch { return fallback; }
+};
+
+// Fix: Safety check for code highlighter
+const highlightSyntax = (code) => {
+  if (!code || typeof code !== 'string') return code;
+  let colored = code
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/\b(const|let|var|function|return|if|else|import|from|async|await|try|catch|class|export|default)\b/g, '<span style="color: #c678dd; font-weight: bold;">$1</span>')
+    .replace(/\b(console|log|document|window)\b/g, '<span style="color: #61afef;">$1</span>')
+    .replace(/(['"`])(.*?)\1/g, '<span style="color: #98c379;">$&</span>')
+    .replace(/\/\/.*$/gm, '<span style="color: #5c6370; font-style: italic;">$&</span>');
+  return <div dangerouslySetInnerHTML={{ __html: colored }} />;
 };
 
 // --- COMPONENTS ---
@@ -46,8 +63,25 @@ const ToastContainer = ({ toasts, removeToast }) => (
     </div>
 );
 
+const CodeBlock = ({ language, code }) => {
+  const [copied, setCopied] = useState(false);
+  const safeCode = code || "";
+  const handleCopy = () => { navigator.clipboard.writeText(safeCode); setCopied(true); setTimeout(() => setCopied(false), 2000); };
+  return (
+    <div className="w-full my-3 rounded-lg overflow-hidden font-mono text-sm border border-white/10 shadow-md bg-[#1e1e1e]">
+      <div className="flex items-center justify-between px-4 py-2 bg-[#252526] text-gray-300 border-b border-white/5 select-none">
+        <div className="flex items-center gap-2"><Terminal size={14} className="text-blue-400"/><span className="text-xs font-bold uppercase">{language || 'code'}</span></div>
+        <button onClick={handleCopy} className="flex items-center gap-1.5 text-xs hover:text-white transition-colors">{copied ? <Check size={14} className="text-green-500"/> : <Copy size={14}/>} {copied ? 'Disalin' : 'Salin'}</button>
+      </div>
+      <div className="p-4 overflow-x-auto custom-scrollbar"><pre className="text-[13px] leading-6 text-[#d4d4d4] whitespace-pre">{highlightSyntax(safeCode)}</pre></div>
+    </div>
+  );
+};
+
 const MessageItem = ({ role, content, image, isDark }) => {
   const isUser = role === 'user';
+  const parts = (content || "").split(/```(\w*)\n([\s\S]*?)```/g);
+
   return (
     <div className={`w-full flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 px-4 md:px-0 animate-in slide-in-from-bottom-2 duration-300`}>
       <div className={`flex w-full max-w-3xl gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
@@ -58,7 +92,11 @@ const MessageItem = ({ role, content, image, isDark }) => {
           <div className={`text-[15px] leading-relaxed shadow-sm transition-all ${isUser ? (isDark ? 'bg-[#2f2f2f] text-white' : 'bg-[#f4f4f4] text-gray-800') + ' py-3 px-5 rounded-2xl rounded-tr-sm' : (isDark ? 'text-gray-200' : 'text-gray-800') + ' w-full px-1'}`}>
              {!isUser && <div className="font-bold text-xs mb-2 opacity-50 text-indigo-400 select-none">Shanove AI</div>}
              {image && <img src={image} alt="Result" className="mb-4 rounded-xl border border-white/10 shadow-lg w-full max-h-[350px] object-cover" />}
-             <div className="whitespace-pre-wrap break-words">{content.split('**').map((chk, i) => i % 2 === 1 ? <strong key={i} className="text-indigo-400">{chk}</strong> : chk)}</div>
+             {parts.map((part, index) => {
+               if (index % 3 === 0 && part.trim()) return <div key={index} className="whitespace-pre-wrap">{part.split('**').map((chk, i) => i % 2 === 1 ? <strong key={i} className="text-indigo-400">{chk}</strong> : chk)}</div>;
+               if (index % 3 === 2) return <CodeBlock key={index} language={parts[index - 1]} code={part} />;
+               return null;
+             })}
           </div>
         </div>
       </div>
@@ -66,11 +104,149 @@ const MessageItem = ({ role, content, image, isDark }) => {
   );
 };
 
-// --- SIDEBAR (RESTORED RENAME/DELETE) ---
+// --- PAGES ---
+
+// 1. Docs Page (FIXED)
+const DocsPage = ({ isDark }) => {
+    return (
+        <div className="p-6 h-full overflow-y-auto animate-in fade-in custom-scrollbar">
+            <h2 className="text-3xl font-bold mb-2">⚡ API Documentation</h2>
+            <p className="opacity-60 mb-8">Dokumentasi REST API Shanove AI (Public Endpoints).</p>
+
+            {/* Base URL */}
+            <div className={`p-6 rounded-xl border mb-8 ${isDark ? 'bg-white/5 border-white/10' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center gap-2 mb-2 font-bold text-lg"><FileJson size={20} className="text-blue-500"/> Base URL</div>
+                <div className="flex items-center gap-2">
+                    <span className="px-2 py-1 bg-green-500/10 text-green-500 font-mono text-sm rounded">POST</span>
+                    <span className="font-mono text-sm opacity-80">{APP_INFO.api_domain + "/api/v1/chat"}</span>
+                </div>
+            </div>
+
+            {/* Text Endpoint */}
+            <div className="mb-8">
+                <h3 className="text-xl font-bold text-indigo-400 mb-4 flex items-center gap-2"><Terminal size={20}/> 1. Text Generation</h3>
+                <div className="space-y-4">
+                    <div className="text-sm opacity-70">Gunakan model `shanove` atau `worm`. Kirim request JSON.</div>
+                    
+                    <div className="font-bold text-sm uppercase opacity-50 mb-1">Request (JSON)</div>
+                    <CodeBlock language="json" code={`{
+  "model": "shanove", 
+  "query": "Halo, apa kabar?"
+}`} />
+
+                    <div className="font-bold text-sm uppercase opacity-50 mb-1">Response (JSON)</div>
+                    <CodeBlock language="json" code={`{
+  "status": true,
+  "model": "shanove",
+  "result": "Halo! Saya baik, ada yang bisa dibantu?"
+}`} />
+                </div>
+            </div>
+
+            {/* Image Endpoint */}
+            <div className="mb-12">
+                <h3 className="text-xl font-bold text-yellow-400 mb-4 flex items-center gap-2"><ImageIcon size={20}/> 2. Image Gen (Nano Banana)</h3>
+                <div className="space-y-4">
+                    <div className="text-sm opacity-70">Gunakan model `nano`. Wajib pakai `FormData` untuk upload file.</div>
+                    
+                    <div className="font-bold text-sm uppercase opacity-50 mb-1">Request (Multipart/Form-Data)</div>
+                    <CodeBlock language="javascript" code={`const formData = new FormData();
+formData.append('model', 'nano');
+formData.append('prompt', 'Ubah jadi anime');
+formData.append('image', fileInput.files[0]);
+
+// POST request ke endpoint...`} />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// 2. Profile Page
+const ProfilePage = ({ user, currEmail, onUpdateUsername, isDark }) => {
+    const [isEditing, setIsEditing] = useState(false);
+    const [newName, setNewName] = useState(user.username || '');
+    return (
+        <div className="p-6 flex flex-col items-center justify-center h-full text-center animate-in fade-in">
+            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-4xl font-bold text-white mb-4 shadow-xl">
+                {user.username ? user.username[0].toUpperCase() : <User size={40}/>}
+            </div>
+            <div className="flex items-center gap-2 mb-1">
+                {isEditing ? (
+                    <input autoFocus value={newName} onChange={e=>setNewName(e.target.value)} className={`bg-transparent border-b border-blue-500 outline-none text-xl font-bold text-center w-40 ${isDark?'text-white':'text-black'}`} />
+                ) : ( <h2 className="text-2xl font-bold">{user.username || 'Guest'}</h2> )}
+                {currEmail && (
+                    <button onClick={() => { if(isEditing) onUpdateUsername(newName); setIsEditing(!isEditing); }} className="p-1 hover:text-blue-500">
+                        {isEditing ? <Save size={18}/> : <Edit2 size={18}/>}
+                    </button>
+                )}
+            </div>
+            <div className="text-sm opacity-50 mb-4">{currEmail || 'Not Logged In'}</div>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-widest ${user.isAdmin?'bg-red-500/20 text-red-500':currEmail?'bg-blue-500/20 text-blue-500':'bg-gray-500/20 text-gray-500'}`}>{user.isAdmin?'ADMINISTRATOR':currEmail?'PRO MEMBER':'FREE TIER'}</span>
+            <div className={`mt-8 w-full max-w-xs p-4 rounded-xl border ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
+                <div className="flex justify-between text-sm mb-2 opacity-70"><span>Daily Usage</span><span>{user.usage} / {user.limit}</span></div>
+                <div className="h-2 bg-gray-700 rounded-full overflow-hidden"><div className="h-full bg-indigo-500" style={{width:`${Math.min(100,(user.usage/user.limit)*100)}%`}}></div></div>
+            </div>
+        </div>
+    );
+};
+
+// 3. Thanks Page
+const ThanksPage = ({ isDark }) => (
+    <div className="p-8 h-full overflow-y-auto animate-in fade-in">
+        <h2 className="text-3xl font-bold mb-6 text-center">✨ Credits</h2>
+        <div className="space-y-4 max-w-md mx-auto">
+            {['Kasan (Creator)', 'Leo (Owner)', 'Cerebras AI', 'Nano Banana Team', 'Vercel'].map((n, i) => (
+                <div key={i} className={`p-4 rounded-xl flex items-center gap-4 border ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
+                    <Heart className="text-pink-500 fill-current" size={20}/> <span className="font-bold">{n}</span>
+                </div>
+            ))}
+        </div>
+        <div className="text-center mt-8 opacity-50 text-sm">Made with ❤️ by Shanove Team</div>
+    </div>
+);
+
+// 4. Admin Page
+const AdminPage = ({ usersDb, setUsersDb, isDark, showToast }) => {
+    const [search, setSearch] = useState('');
+    const [editLimit, setEditLimit] = useState('');
+    if (!usersDb) return null;
+
+    const handleAddLimit = () => {
+        const targetEmail = Object.keys(usersDb).find(e => e === search || usersDb[e]?.username === search);
+        if(!targetEmail) { showToast("User tidak ditemukan!", "error"); return; }
+        setUsersDb(prev => ({...prev, [targetEmail]: {...prev[targetEmail], limit: parseInt(editLimit)}}));
+        showToast(`Limit updated!`, "success");
+    };
+
+    return (
+        <div className="p-6 h-full overflow-y-auto custom-scrollbar animate-in fade-in">
+            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><Shield className="text-red-500"/> Admin Panel</h2>
+            <div className={`p-6 rounded-xl border mb-8 ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
+                <h3 className="font-bold mb-4">Edit Limit via Username/Email</h3>
+                <div className="flex gap-2 flex-col md:flex-row">
+                    <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Username atau Email..." className={`flex-1 p-3 rounded-lg outline-none border ${isDark?'bg-black/30 border-gray-700':'bg-white border-gray-300'}`}/>
+                    <input type="number" value={editLimit} onChange={e=>setEditLimit(e.target.value)} placeholder="Limit" className={`w-24 p-3 rounded-lg outline-none border text-center ${isDark?'bg-black/30 border-gray-700':'bg-white border-gray-300'}`}/>
+                    <button onClick={handleAddLimit} className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700">Update</button>
+                </div>
+            </div>
+            <div className="space-y-2">
+                <h3 className="font-bold opacity-70 mb-2">Registered Users</h3>
+                {Object.entries(usersDb).map(([email, data]) => (
+                    <div key={email} className={`p-3 rounded-lg flex justify-between items-center text-sm ${isDark ? 'bg-white/5' : 'bg-gray-100'}`}>
+                        <div><div className="font-bold">{data.username}</div><div className="text-xs opacity-50">{email}</div></div>
+                        <span className="font-bold text-indigo-400">Limit: {data.limit}</span>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+};
+
+// 5. Sidebar
 const Sidebar = ({ isOpen, onClose, page, setPage, chats, currentChatId, onSelectChat, onNewChat, onDeleteChat, onRenameChat, user, onLogout, onOpenAuth, isDark }) => {
     const [editingId, setEditingId] = useState(null);
     const [editName, setEditName] = useState("");
-
     const startEdit = (chat) => { setEditingId(chat.id); setEditName(chat.title); };
     const saveEdit = (id) => { onRenameChat(id, editName); setEditingId(null); };
 
@@ -84,19 +260,19 @@ const Sidebar = ({ isOpen, onClose, page, setPage, chats, currentChatId, onSelec
                 </div>
                 
                 <div className="flex-1 p-4 space-y-4 overflow-y-auto custom-scrollbar">
-                    {/* MENU UTAMA */}
+                    {/* MENU */}
                     <div className="space-y-1">
                         <div className="text-xs font-bold opacity-40 uppercase tracking-widest px-2 mb-2">Menu</div>
-                        {['chat', 'profile', 'thanks'].map(p => (
+                        {['chat', 'profile', 'api', 'thanks'].map(p => (
                             <button key={p} onClick={()=>{setPage(p); onClose()}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all capitalize ${page===p ? 'bg-indigo-600 text-white shadow-lg' : 'hover:bg-white/5'}`}>
-                                {p==='chat' ? <Home size={18}/> : p==='profile' ? <User size={18}/> : <Heart size={18}/>} {p}
+                                {p==='chat'?<Home size={18}/> : p==='profile'?<User size={18}/> : p==='api'?<Book size={18}/> : <Heart size={18}/>} {p==='api'?'API Docs':p}
                             </button>
                         ))}
                         <a href={APP_INFO.ig_url} target="_blank" className="w-full flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-white/5 transition-all text-pink-500"><Instagram size={18}/> Instagram</a>
-                        {user.isAdmin && <button onClick={()=>{setPage('admin'); onClose()}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${page==='admin' ? 'bg-red-600 text-white' : 'text-red-500 hover:bg-red-500/10'}`}><Shield size={18}/> Admin Panel</button>}
+                        {user.isAdmin && <button onClick={()=>{setPage('admin'); onClose()}} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all mt-4 ${page==='admin' ? 'bg-red-600 text-white' : 'text-red-500 hover:bg-red-500/10'}`}><Shield size={18}/> Admin Panel</button>}
                     </div>
 
-                    {/* HISTORY CHAT (RESTORED) */}
+                    {/* HISTORY (Only on Chat Page) */}
                     {page === 'chat' && (
                         <div className="space-y-1 pt-4 border-t border-white/10">
                             <div className="flex justify-between items-center px-2 mb-2">
@@ -111,8 +287,6 @@ const Sidebar = ({ isOpen, onClose, page, setPage, chats, currentChatId, onSelec
                                     {editingId === chat.id ? (
                                         <input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} onBlur={() => saveEdit(chat.id)} onKeyDown={(e) => e.key === 'Enter' && saveEdit(chat.id)} className="bg-transparent border-b border-blue-500 outline-none text-sm w-full" onClick={(e) => e.stopPropagation()}/>
                                     ) : ( <span className="text-sm truncate w-28">{chat.title}</span> )}
-                                    
-                                    {/* Edit/Delete Actions */}
                                     {(currentChatId === chat.id || editingId === chat.id) && (
                                         <div className="absolute right-2 flex gap-1 bg-inherit pl-2">
                                             <button onClick={(e) => { e.stopPropagation(); startEdit(chat); }} className="p-1 hover:text-blue-400"><Edit3 size={12}/></button>
@@ -131,7 +305,7 @@ const Sidebar = ({ isOpen, onClose, page, setPage, chats, currentChatId, onSelec
                             <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center font-bold text-lg text-white">{user.username ? user.username[0].toUpperCase() : 'U'}</div>
                             <div className="flex-1 min-w-0">
                                 <div className="font-bold truncate text-sm">{user.username}</div>
-                                <div className="text-xs opacity-60 font-bold">{user.isAdmin?'ADMIN':'PRO'}</div>
+                                <div className="text-xs opacity-60 font-bold">{user.isAdmin?'ADMIN':'PRO MEMBER'}</div>
                             </div>
                             <button onClick={onLogout} className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg"><LogOut size={18}/></button>
                         </div>
@@ -144,7 +318,7 @@ const Sidebar = ({ isOpen, onClose, page, setPage, chats, currentChatId, onSelec
     );
 };
 
-// 5. Auth Modal
+// 6. Auth Modal
 const AuthModal = ({ isOpen, onClose, onLogin, showToast, isDark }) => {
   const [step, setStep] = useState('email'); 
   const [email, setEmail] = useState('');
@@ -190,85 +364,6 @@ const AuthModal = ({ isOpen, onClose, onLogin, showToast, isDark }) => {
   );
 };
 
-// 6. Pages
-const ProfilePage = ({ user, currEmail, onUpdateUsername, isDark }) => {
-    const [isEditing, setIsEditing] = useState(false);
-    const [newName, setNewName] = useState(user.username || '');
-    return (
-        <div className="p-6 flex flex-col items-center justify-center h-full text-center animate-in fade-in">
-            <div className="w-24 h-24 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-4xl font-bold text-white mb-4 shadow-xl">
-                {user.username ? user.username[0].toUpperCase() : <User size={40}/>}
-            </div>
-            <div className="flex items-center gap-2 mb-1">
-                {isEditing ? (
-                    <input autoFocus value={newName} onChange={e=>setNewName(e.target.value)} className={`bg-transparent border-b border-blue-500 outline-none text-xl font-bold text-center w-40 ${isDark?'text-white':'text-black'}`} />
-                ) : ( <h2 className="text-2xl font-bold">{user.username || 'Guest'}</h2> )}
-                {currEmail && (
-                    <button onClick={() => { if(isEditing) onUpdateUsername(newName); setIsEditing(!isEditing); }} className="p-1 hover:text-blue-500">
-                        {isEditing ? <Save size={18}/> : <Edit2 size={18}/>}
-                    </button>
-                )}
-            </div>
-            <div className="text-sm opacity-50 mb-4">{currEmail || 'Not Logged In'}</div>
-            <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-widest ${user.isAdmin?'bg-red-500/20 text-red-500':currEmail?'bg-blue-500/20 text-blue-500':'bg-gray-500/20 text-gray-500'}`}>{user.isAdmin?'ADMINISTRATOR':currEmail?'PRO MEMBER':'FREE TIER'}</span>
-            <div className={`mt-8 w-full max-w-xs p-4 rounded-xl border ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
-                <div className="flex justify-between text-sm mb-2 opacity-70"><span>Daily Usage</span><span>{user.usage} / {user.limit}</span></div>
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden"><div className="h-full bg-indigo-500" style={{width:`${Math.min(100,(user.usage/user.limit)*100)}%`}}></div></div>
-            </div>
-        </div>
-    );
-};
-
-const ThanksPage = ({ isDark }) => (
-    <div className="p-8 h-full overflow-y-auto animate-in fade-in">
-        <h2 className="text-3xl font-bold mb-6 text-center">✨ Credits</h2>
-        <div className="space-y-4 max-w-md mx-auto">
-            {['Kasan (Creator)', 'Leo (Owner)', 'Cerebras AI', 'Nano Banana Team', 'Vercel'].map((n, i) => (
-                <div key={i} className={`p-4 rounded-xl flex items-center gap-4 border ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
-                    <Heart className="text-pink-500 fill-current" size={20}/> <span className="font-bold">{n}</span>
-                </div>
-            ))}
-        </div>
-        <div className="text-center mt-8 opacity-50 text-sm">Made with ❤️ by Shanove Team</div>
-    </div>
-);
-
-const AdminPage = ({ usersDb, setUsersDb, isDark, showToast }) => {
-    const [search, setSearch] = useState('');
-    const [editLimit, setEditLimit] = useState('');
-    if (!usersDb) return null;
-
-    const handleAddLimit = () => {
-        const targetEmail = Object.keys(usersDb).find(e => e === search || usersDb[e]?.username === search);
-        if(!targetEmail) { showToast("User tidak ditemukan!", "error"); return; }
-        setUsersDb(prev => ({...prev, [targetEmail]: {...prev[targetEmail], limit: parseInt(editLimit)}}));
-        showToast(`Limit updated!`, "success");
-    };
-
-    return (
-        <div className="p-6 h-full overflow-y-auto custom-scrollbar animate-in fade-in">
-            <h2 className="text-2xl font-bold mb-6 flex items-center gap-2"><Shield className="text-red-500"/> Admin Panel</h2>
-            <div className={`p-6 rounded-xl border mb-8 ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
-                <h3 className="font-bold mb-4">Edit Limit via Username/Email</h3>
-                <div className="flex gap-2 flex-col md:flex-row">
-                    <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Username atau Email..." className={`flex-1 p-3 rounded-lg outline-none border ${isDark?'bg-black/30 border-gray-700':'bg-white border-gray-300'}`}/>
-                    <input type="number" value={editLimit} onChange={e=>setEditLimit(e.target.value)} placeholder="Limit" className={`w-24 p-3 rounded-lg outline-none border text-center ${isDark?'bg-black/30 border-gray-700':'bg-white border-gray-300'}`}/>
-                    <button onClick={handleAddLimit} className="px-6 py-3 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700">Update</button>
-                </div>
-            </div>
-            <div className="space-y-2">
-                <h3 className="font-bold opacity-70 mb-2">Registered Users</h3>
-                {Object.entries(usersDb).map(([email, data]) => (
-                    <div key={email} className={`p-3 rounded-lg flex justify-between items-center text-sm ${isDark ? 'bg-white/5' : 'bg-gray-100'}`}>
-                        <div><div className="font-bold">{data.username}</div><div className="text-xs opacity-50">{email}</div></div>
-                        <span className="font-bold text-indigo-400">Limit: {data.limit}</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
 // --- MAIN APP ---
 export default function App() {
   const [isDark, setIsDark] = useState(true);
@@ -277,7 +372,6 @@ export default function App() {
   const [toasts, setToasts] = useState([]);
   const [page, setPage] = useState('chat');
 
-  // DB & STATE
   const [usersDb, setUsersDb] = useState(() => safeParse('shanove_db_users', {}));
   const [currEmail, setCurrEmail] = useState(localStorage.getItem('shanove_curr_email'));
   const [chats, setChats] = useState(() => safeParse('shanove_chats_v6', [{id:1, title:'New Chat', messages:[{role:'assistant', content:'Halo! Saya Shanove AI.'}]}]));
@@ -291,7 +385,6 @@ export default function App() {
   
   const bottomRef = useRef(null);
 
-  // COMPUTED
   const user = currEmail ? (usersDb[currEmail] || { role:'user', limit: LIMITS.USER, usage: 0, username: 'User' }) : { role:'guest', limit: LIMITS.GUEST, usage: parseInt(localStorage.getItem('shanove_guest_usage')||0) };
   const isAdmin = currEmail === APP_INFO.admin_email;
   const currentChat = chats.find(c => c.id === chatId) || chats[0];
@@ -302,7 +395,6 @@ export default function App() {
   useEffect(() => { if(currEmail) localStorage.setItem('shanove_curr_email', currEmail); else localStorage.removeItem('shanove_curr_email'); }, [currEmail]);
   useEffect(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), [chats, loading, status, page]);
 
-  // DAILY RESET
   useEffect(() => {
       const today = new Date().toDateString();
       if (localStorage.getItem('shanove_last_reset') !== today) {
@@ -336,6 +428,10 @@ export default function App() {
       }
   };
 
+  const handleNewChat = () => { const nid=Date.now(); setChats([{id:nid,title:'New Chat',messages:[]} , ...chats]); setChatId(nid); };
+  const handleDeleteChat = (id) => { const f=chats.filter(c=>c.id!==id); if(f.length===0) setChats([{id:1,title:'New Chat',messages:[]}]); else { setChats(f); if(chatId===id) setChatId(f[0].id); } };
+  const handleRenameChat = (id, newName) => setChats(chats.map(c => c.id === id ? { ...c, title: newName } : c));
+
   const handleSend = async (e) => {
       e.preventDefault();
       if (!input.trim() || loading) return;
@@ -350,9 +446,11 @@ export default function App() {
 
       const userMsg = { role: 'user', content: input, image: model==='nano' ? preview : null };
       const newMsgs = [...currentChat.messages, userMsg];
-      
       const newChats = chats.map(c => c.id === chatId ? { ...c, messages: newMsgs, title: c.messages.length===1 ? input.slice(0,15)+'...' : c.title } : c);
       setChats(newChats);
+      
+      if(currentChat.messages.length === 0) handleRenameChat(chatId, input.slice(0,20));
+
       setInput(''); setLoading(true); setStatus(model==='nano' ? "Bentar bg lagi proses nano Banana..." : "Sedang mengetik...");
 
       if (currEmail) {
@@ -367,7 +465,6 @@ export default function App() {
           formData.append('model', model);
           formData.append('query', input);
           if (model === 'shanove') {
-              // Send minimal history for context
               const history = currentChat.messages.slice(-5).map(m => ({role: m.role, content: m.content || ""}));
               formData.append('history', JSON.stringify(history));
           }
@@ -381,30 +478,13 @@ export default function App() {
           let reply = data.result;
           let resImg = null;
           
-          if(model === 'nano') {
-              reply = "🍌 Selesai!";
-              resImg = data.result; 
-          } else if(model === 'worm') {
-              reply = "🐛 " + data.result;
-          }
+          if(model === 'nano') { reply = "🍌 Selesai!"; resImg = data.result; } 
+          else if(model === 'worm') { reply = "🐛 " + data.result; }
 
           setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, userMsg, { role: 'assistant', content: reply, image: resImg }] } : c));
       } catch (err) {
           setChats(prev => prev.map(c => c.id === chatId ? { ...c, messages: [...c.messages, userMsg, { role: 'assistant', content: `Error: ${err.message}` }] } : c));
       } finally { setLoading(false); setStatus(''); if(model==='nano'){setImg(null);setPreview(null);} }
-  };
-
-  // --- HANDLERS HISTORY ---
-  const handleNewChat = () => {
-      const nid=Date.now(); setChats([{id:nid,title:'New Chat',messages:[]} , ...chats]); setChatId(nid);
-  };
-  const handleDeleteChat = (id) => {
-      const f=chats.filter(c=>c.id!==id); 
-      if(f.length===0) handleNewChat();
-      else { setChats(f); if(chatId===id) setChatId(f[0].id); }
-  };
-  const handleRenameChat = (id, newName) => {
-      setChats(chats.map(c => c.id === id ? { ...c, title: newName } : c));
   };
 
   return (
@@ -434,7 +514,7 @@ export default function App() {
                           <div className={`text-[10px] font-bold mt-1 ml-1 ${remaining<=3?'text-red-500 animate-pulse':'opacity-50'}`}>Sisa Limit: {remaining}</div>
                       </div>
                   )}
-                  {page !== 'chat' && <h1 className="font-bold text-lg capitalize">{page === 'admin' ? 'Admin Panel' : page}</h1>}
+                  {page !== 'chat' && <h1 className="font-bold text-lg capitalize">{page === 'admin' ? 'Admin Panel' : page} Page</h1>}
               </div>
               <button onClick={()=>setIsDark(!isDark)} className="p-2 rounded-lg hover:bg-white/10">{isDark?<Sun size={20}/>:<Moon size={20}/>}</button>
           </header>
@@ -450,6 +530,7 @@ export default function App() {
               {page === 'profile' && <ProfilePage user={user} currEmail={currEmail} onUpdateUsername={handleUpdateUsername} isDark={isDark} />}
               {page === 'thanks' && <ThanksPage isDark={isDark} />}
               {page === 'admin' && isAdmin && <AdminPage usersDb={usersDb} setUsersDb={setUsersDb} isDark={isDark} showToast={addToast} />}
+              {page === 'api' && <DocsPage isDark={isDark} />}
           </main>
 
           {page === 'chat' && (
