@@ -416,7 +416,7 @@ export default function App() {
                     )}
                     {page === 'docs' && <DocsPage isDark={isDark} />}
                     {page === 'profile' && <ProfilePage user={user} currEmail={currEmail} setUsersDb={setUsers} isDark={isDark} addToast={addToast} />}
-                    {page === 'thanks' && <div className="p-8 text-center font-bold text-xl h-full flex items-center justify-center">Thanks to Kasan, Leo, Cerebras, Vercel</div>}
+                    {page === 'thanks' && <div className="p-8 text-center font-bold text-xl h-full flex items-center justify-center">Thanks to Kasan</div>}
                 </main>
 
                 {page === 'chat' && (
