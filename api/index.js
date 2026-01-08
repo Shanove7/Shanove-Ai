@@ -14,6 +14,29 @@ app.use(express.json());
 // --- UTILS ---
 const rand = n => Array.from({ length: n }, () => 'abcdefghijklmnopqrstuvwxyz0123456789'[Math.floor(Math.random() * 36)]).join('');
 
+// --- PUBLIC REST API ENDPOINT ---
+// Admin bisa menggunakan ini sebagai layanan API
+app.post('/api/v1/chat', async (req, res) => {
+    // Validasi API Key sederhana (Di production gunakan Database)
+    const apiKey = req.headers['authorization'];
+    if (!apiKey || !apiKey.startsWith('Bearer sk-shanove')) {
+        return res.status(401).json({ status: false, message: "Invalid API Key" });
+    }
+
+    const { model, query, prompt } = req.body;
+    
+    try {
+        if (model === 'worm') {
+            const result = await wormgptChat(query || prompt);
+            return res.json({ status: true, model: 'worm-gpt', result });
+        } else {
+            return res.status(400).json({ status: false, message: "Model not supported in this endpoint yet" });
+        }
+    } catch (e) {
+        return res.status(500).json({ status: false, message: e.message });
+    }
+});
+
 // --- WORM GPT LOGIC ---
 async function wormgptChat(query) {
     const messageId = `${rand(8)}-${rand(4)}-${rand(4)}-${rand(4)}-${rand(12)}`;
@@ -43,7 +66,6 @@ async function wormgptChat(query) {
     const raw = await res.text();
     let result = '';
     
-    // Parsing Stream response manually
     for (const line of raw.split('\n')) {
         if (!line.startsWith('data: ')) continue;
         const data = line.slice(6).trim();
@@ -64,12 +86,10 @@ const NANO_HEADERS = {
 };
 
 async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
-    // 1. Temp Mail
     const mailRes = await fetch('https://api.nekolabs.web.id/tools/tempmail/v1/create').then(r => r.json());
     if(!mailRes.result) throw new Error("Gagal create email");
     const { email, sessionId } = mailRes.result;
 
-    // 2. Register
     const password = 'Pass' + crypto.randomBytes(4).toString('hex') + '!';
     const name = 'User' + crypto.randomBytes(2).toString('hex');
     
@@ -79,9 +99,8 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
         body: JSON.stringify({ email, password, name })
     });
 
-    // 3. Polling Email & Verify
     let verifyLink = null;
-    for(let i=0; i<15; i++) { // Increase attempts to 15 (~45s)
+    for(let i=0; i<15; i++) {
         await new Promise(r => setTimeout(r, 3000));
         const inbox = await fetch(`https://api.nekolabs.web.id/tools/tempmail/v1/inbox?id=${sessionId}`).then(r => r.json());
         if(inbox.result?.emails?.length) {
@@ -96,7 +115,6 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
     const rawCookies = verifyRes.headers.raw()['set-cookie'];
     const cookie = rawCookies ? rawCookies.map(v => v.split(';')[0]).join('; ') : '';
 
-    // 4. Upload Image
     const form = new FormData();
     form.append('files', imageBuffer, { filename: 'image.jpg', contentType: mimeType });
     
@@ -109,7 +127,6 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
     const uploadedUrl = upJson?.data?.urls?.[0];
     if(!uploadedUrl) throw new Error("Gagal upload gambar");
 
-    // 5. Generate
     const genRes = await fetch('https://nano-banana-pro.co/api/ai/generate', {
         method: 'POST',
         headers: { ...NANO_HEADERS, 'Content-Type': 'application/json', 'Cookie': cookie },
@@ -122,8 +139,7 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
     const taskId = genJson?.data?.id;
     if(!taskId) throw new Error("Gagal start task AI");
 
-    // 6. Polling Result
-    for(let i=0; i<15; i++) { // Max 60s
+    for(let i=0; i<15; i++) {
         await new Promise(r => setTimeout(r, 4000));
         const qRes = await fetch('https://nano-banana-pro.co/api/ai/query', {
             method: 'POST',
@@ -131,7 +147,6 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
             body: JSON.stringify({ taskId })
         });
         
-        // Cek jika langsung binary image
         if(qRes.headers.get('content-type')?.includes('image')) {
             const buffer = await qRes.buffer();
             return `data:${qRes.headers.get('content-type')};base64,${buffer.toString('base64')}`;
@@ -144,7 +159,7 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
                 const task = JSON.parse(taskStr);
                 if(task.state === 'success') {
                     const res = JSON.parse(task.resultJson || '{}');
-                    return res?.resultUrls?.[0]; // Return URL
+                    return res?.resultUrls?.[0];
                 }
                 if(['failed', 'error'].includes(task.state)) throw new Error("AI Task Failed");
             }
@@ -154,8 +169,7 @@ async function nanoBananaImg2Img(prompt, imageBuffer, mimeType) {
 }
 
 // --- ROUTES ---
-
-app.get('/', (req, res) => res.send('Shanove AI Backend is Running!'));
+app.get('/', (req, res) => res.send('Shanove AI Engine v17 - Running'));
 
 app.post('/api/worm', async (req, res) => {
     try {
@@ -173,11 +187,10 @@ app.post('/api/nano', upload.single('image'), async (req, res) => {
         const { prompt } = req.body;
         if (!req.file || !prompt) return res.status(400).json({ error: 'Image and prompt required' });
         const result = await nanoBananaImg2Img(prompt, req.file.buffer, req.file.mimetype);
-        res.json({ result }); // Returns URL or Base64
+        res.json({ result });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
 
-// PENTING: Export app untuk Vercel Serverless
 module.exports = app;
