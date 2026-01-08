@@ -19,23 +19,21 @@ const EMAIL_CONFIG = {
 
 const APP_INFO = {
     name: "Shanove AI",
-    version: "v19.0 Stable",
+    version: "v20.0 Fixed",
     logo_url: "https://raw.githubusercontent.com/Shanove7/Shanove-Ai/refs/heads/main/1764308690923.jpg",
     wa_url: "https://wa.me/6285185032092",
     admin_email: "kasannudin29@gmail.com"
 };
 
 const LIMITS = { GUEST: 3, USER: 50, ADMIN: 999999 };
-
 const SYSTEM_PROMPT = "Nama: Shanove AI. Sifat: Asisten Cerdas. Bahasa: Indonesia. Format: Gunakan **bold** untuk poin penting.";
 
-// --- SAFE STORAGE UTILS (Anti Layar Putih) ---
+// --- SAFE STORAGE UTILS ---
 const safeParse = (key, fallback) => {
     try {
         const item = localStorage.getItem(key);
         return item ? JSON.parse(item) : fallback;
     } catch (e) {
-        console.error("Resetting corrupt storage:", key);
         localStorage.removeItem(key);
         return fallback;
     }
@@ -85,6 +83,85 @@ const MessageItem = ({ role, content, image, isDark }) => {
       </div>
     </div>
   );
+};
+
+// --- SIDEBAR (RESTORED PROFILE & LIMIT INFO) ---
+const Sidebar = ({ isOpen, onClose, chats, currentChatId, onSelectChat, onNewChat, onDeleteChat, user, limits, onLogout, onOpenAdmin, onOpenAuth, isDark }) => {
+    return (
+        <>
+            {isOpen && <div className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-sm" onClick={onClose}></div>}
+            
+            <div className={`fixed top-0 left-0 h-full w-72 z-50 transform transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 md:static border-r flex flex-col ${isDark ? 'bg-[#171717] border-[#2f2f2f]' : 'bg-gray-50 border-gray-200'}`}>
+                {/* Header Sidebar */}
+                <div className="p-4">
+                    <div className="flex items-center gap-3 mb-6">
+                        <img src={APP_INFO.logo_url} className="w-8 h-8 rounded-lg shadow-sm" alt="Logo"/>
+                        <span className={`font-bold text-lg ${isDark ? 'text-white' : 'text-gray-900'}`}>Shanove AI</span>
+                        <button onClick={onClose} className="md:hidden ml-auto p-1 hover:bg-white/10 rounded"><X size={20}/></button>
+                    </div>
+                    <button onClick={() => { onNewChat(); if(window.innerWidth < 768) onClose(); }} className={`w-full py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-bold mb-2 transition-all ${isDark ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'}`}>
+                        <Plus size={18} /> Chat Baru
+                    </button>
+                </div>
+
+                {/* Chat List */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar px-3 space-y-1">
+                    {chats.map(chat => (
+                        <div key={chat.id} className={`group relative flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-colors ${currentChatId === chat.id ? (isDark ? 'bg-[#2f2f2f] text-white' : 'bg-gray-200 text-gray-900') : (isDark ? 'text-gray-400 hover:bg-[#2f2f2f]/50' : 'text-gray-600 hover:bg-gray-100')}`}
+                            onClick={() => { onSelectChat(chat.id); if(window.innerWidth < 768) onClose(); }}
+                        >
+                            <MessageSquare size={16} className="shrink-0 opacity-70" />
+                            <span className="text-sm truncate w-full">{chat.title}</span>
+                            <button onClick={(e) => { e.stopPropagation(); onDeleteChat(chat.id); }} className="absolute right-2 p-1 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={14}/></button>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Footer Profile & Limit (RESTORED) */}
+                <div className={`p-4 border-t ${isDark ? 'border-white/10' : 'border-gray-200'}`}>
+                    {user.email ? (
+                        <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-lg text-white shadow-lg">{user.email[0].toUpperCase()}</div>
+                                <div className="flex-1 min-w-0">
+                                    <div className={`font-bold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{user.email.split('@')[0]}</div>
+                                    <div className="text-xs opacity-60 flex justify-between">
+                                        <span>{user.usage}/{user.limit}</span> 
+                                        <span className="uppercase font-bold text-[10px]">{user.isAdmin ? 'ADMIN' : 'PRO'}</span>
+                                    </div>
+                                    {/* Limit Progress Bar */}
+                                    <div className="h-1.5 bg-gray-700 rounded-full mt-1 overflow-hidden">
+                                        <div className="h-full bg-indigo-500 transition-all duration-500" style={{width: `${Math.min(100, (user.usage / user.limit) * 100)}%`}}></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2">
+                                {user.isAdmin && (
+                                    <button onClick={onOpenAdmin} className={`col-span-2 py-2 rounded-lg text-xs font-bold flex items-center justify-center gap-2 ${isDark ? 'bg-gray-800 hover:bg-gray-700' : 'bg-gray-200 hover:bg-gray-300'}`}>
+                                        <Key size={14}/> Admin Panel
+                                    </button>
+                                )}
+                                <button onClick={onLogout} className="col-span-2 py-2 text-red-400 hover:bg-red-500/10 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors">
+                                    <LogOut size={14}/> Logout
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center space-y-3">
+                            <div className="space-y-1">
+                                <div className="flex justify-between text-xs opacity-60"><span>Guest Limit</span><span>{user.usage} / {limits.GUEST}</span></div>
+                                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                    <div className="h-full bg-yellow-500 transition-all duration-500" style={{width: `${Math.min(100, (user.usage / limits.GUEST) * 100)}%`}}></div>
+                                </div>
+                            </div>
+                            <button onClick={onOpenAuth} className={`w-full py-2.5 font-bold rounded-lg text-sm transition-colors ${isDark ? 'bg-white text-black hover:bg-gray-200' : 'bg-black text-white hover:bg-gray-800'}`}>Login / Daftar</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </>
+    );
 };
 
 const AdminPanel = ({ isOpen, onClose, users, setUsers, stats, isDark }) => {
@@ -196,8 +273,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
-  const [toast, setToast] = useState(null);
-
+  
   // DB & AUTH (SAFE LOAD)
   const [usersDb, setUsersDb] = useState(() => safeParse('shanove_db_users', {}));
   const [currEmail, setCurrEmail] = useState(localStorage.getItem('shanove_curr_email'));
@@ -216,7 +292,7 @@ export default function App() {
   
   const bottomRef = useRef(null);
 
-  // COMPUTED
+  // COMPUTED USER
   const user = currEmail ? (usersDb[currEmail] || { role:'user', limit: LIMITS.USER, usage: 0 }) : { role:'guest', limit: LIMITS.GUEST, usage: parseInt(localStorage.getItem('shanove_guest_usage')||0) };
   const isAdmin = currEmail === APP_INFO.admin_email;
   const currentChat = chats.find(c => c.id === chatId) || chats[0];
@@ -239,8 +315,6 @@ export default function App() {
       }
   }, []);
 
-  const showToast = (msg, type='info') => { setToast({msg, type}); setTimeout(() => setToast(null), 3000); };
-
   const handleLogin = (email) => {
       if (!usersDb[email]) {
           const isAdm = email === APP_INFO.admin_email;
@@ -248,7 +322,7 @@ export default function App() {
       }
       setCurrEmail(email);
       setShowAuth(false);
-      showToast("Login Berhasil!", "success");
+      alert("Login Berhasil!");
   };
 
   const handleSend = async (e) => {
@@ -256,12 +330,12 @@ export default function App() {
       if (!input.trim() || loading) return;
 
       if (user.usage >= user.limit) {
-          showToast(currEmail ? "Limit Harian Habis!" : "Limit Tamu Habis. Login yuk!", "error");
+          alert(currEmail ? "Limit Harian Habis!" : "Limit Tamu Habis. Login yuk!");
           if (!currEmail) setShowAuth(true);
           return;
       }
 
-      if (model === 'nano' && !img) { showToast("Upload gambar dulu!", "error"); return; }
+      if (model === 'nano' && !img) { alert("Upload gambar dulu!"); return; }
 
       const userMsg = { role: 'user', content: input, image: model==='nano' ? preview : null };
       const newMsgs = [...currentChat.messages, userMsg];
@@ -299,57 +373,27 @@ export default function App() {
   return (
     <div className={`flex h-[100dvh] overflow-hidden font-sans ${isDark ? 'bg-[#212121] text-white' : 'bg-white text-gray-900'}`}>
       
-      {/* TOAST NOTIFICATION */}
-      {toast && (
-          <div className={`fixed top-4 right-4 z-[100] px-4 py-3 rounded-xl shadow-lg border backdrop-blur-md animate-in slide-in-from-right duration-300 ${toast.type==='error'?'bg-red-500/20 border-red-500 text-red-500':'bg-green-500/20 border-green-500 text-green-500'}`}>
-              <div className="flex items-center gap-2 font-bold">{toast.type==='error'?<AlertTriangle size={16}/>:<Check size={16}/>} {toast.msg}</div>
-          </div>
-      )}
-
       <AdminPanel isOpen={showAdmin} onClose={()=>setShowAdmin(false)} users={usersDb} setUsers={setUsersDb} stats={Object.values(usersDb).reduce((a,b)=>a+b.usage,0)} isDark={isDark} />
 
-      {/* SIDEBAR OVERLAY FOR MOBILE */}
+      {/* SIDEBAR OVERLAY MOBILE */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/50 z-30 md:hidden backdrop-blur-sm" onClick={() => setSidebarOpen(false)}></div>}
 
-      {/* SIDEBAR */}
-      <div className={`fixed inset-y-0 left-0 z-40 w-72 transform transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:static md:translate-x-0 border-r ${isDark ? 'bg-[#171717] border-[#2f2f2f]' : 'bg-gray-50 border-gray-200'}`}>
-          <div className="p-4 flex flex-col h-full">
-              <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-2 font-bold text-lg"><img src={APP_INFO.logo_url} className="w-8 h-8 rounded-lg"/> Shanove AI</div>
-                  <button onClick={() => setSidebarOpen(false)} className="md:hidden"><X/></button>
-              </div>
-              <button onClick={() => { const nid=Date.now(); setChats([{id:nid,title:'New Chat',messages:[]},...chats]); setChatId(nid); if(window.innerWidth<768) setSidebarOpen(false); }} className="w-full py-3 bg-indigo-600 text-white rounded-xl mb-4 flex items-center justify-center gap-2 font-bold hover:bg-indigo-700 transition-colors"><Plus size={18}/> Chat Baru</button>
-              <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1">
-                  {chats.map(c => (
-                      <div key={c.id} onClick={() => {setChatId(c.id); if(window.innerWidth<768) setSidebarOpen(false);}} className={`p-3 rounded-lg cursor-pointer flex items-center justify-between group transition-colors ${chatId===c.id ? 'bg-white/10' : 'hover:bg-white/5'}`}>
-                          <div className="flex items-center gap-2 truncate"><MessageSquare size={16} className="opacity-50"/> <span className="truncate text-sm">{c.title}</span></div>
-                          <button onClick={(e)=>{e.stopPropagation(); setChats(p=>p.filter(x=>x.id!==c.id))}} className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"><Trash2 size={14}/></button>
-                      </div>
-                  ))}
-              </div>
-              <div className="mt-4 pt-4 border-t border-white/10">
-                  {currEmail ? (
-                      <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
-                          <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center font-bold text-lg text-white shadow-lg">{currEmail[0].toUpperCase()}</div>
-                              <div className="flex-1 min-w-0">
-                                  <div className="font-bold truncate">{currEmail.split('@')[0]}</div>
-                                  <div className="text-xs opacity-60 flex justify-between"><span>{user.usage}/{user.limit}</span> <span>{isAdmin?'ADMIN':'PRO'}</span></div>
-                                  <div className="h-1 bg-gray-700 rounded-full mt-1 overflow-hidden"><div className="h-full bg-blue-500" style={{width:`${Math.min(100,(user.usage/user.limit)*100)}%`}}></div></div>
-                              </div>
-                          </div>
-                          {isAdmin && <button onClick={()=>setShowAdmin(true)} className="w-full py-2 bg-gray-800 rounded-lg text-xs font-bold flex items-center justify-center gap-2 hover:bg-gray-700 transition-colors"><Key size={14}/> Panel Admin</button>}
-                          <button onClick={()=>{setCurrEmail(null);showToast("Logout Berhasil")}} className="w-full py-2 text-red-400 hover:bg-red-500/10 rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-colors"><LogOut size={14}/> Logout</button>
-                      </div>
-                  ) : (
-                      <div className="text-center space-y-2">
-                          <div className="text-xs opacity-60">Limit Tamu: {user.usage} / {LIMITS.GUEST}</div>
-                          <button onClick={()=>setShowAuth(true)} className="w-full py-2 bg-white text-black font-bold rounded-lg text-sm hover:bg-gray-200 transition-colors">Login / Daftar</button>
-                      </div>
-                  )}
-              </div>
-          </div>
-      </div>
+      {/* SIDEBAR (Profile is HERE) */}
+      <Sidebar 
+          isOpen={sidebarOpen} 
+          onClose={() => setSidebarOpen(false)}
+          chats={chats}
+          currentChatId={chatId}
+          onSelectChat={setChatId}
+          onNewChat={() => { const nid=Date.now(); setChats([{id:nid,title:'New Chat',messages:[]} , ...chats]); setChatId(nid); }}
+          onDeleteChat={(id) => { const f=chats.filter(c=>c.id!==id); if(f.length===0) setChats([{id:1,title:'New Chat',messages:[]}]); else { setChats(f); if(chatId===id) setChatId(f[0].id); } }}
+          user={user}
+          limits={LIMITS}
+          onLogout={() => { setCurrEmail(null); alert("Logged Out"); }}
+          onOpenAdmin={() => setShowAdmin(true)}
+          onOpenAuth={() => setShowAuth(true)}
+          isDark={isDark}
+      />
 
       {/* MAIN CONTENT */}
       <div className="flex-1 flex flex-col relative w-full h-full">
@@ -364,7 +408,7 @@ export default function App() {
               <button onClick={()=>setIsDark(!isDark)} className="p-2 rounded-lg hover:bg-white/10">{isDark?<Sun size={20}/>:<Moon size={20}/>}</button>
           </header>
 
-          {/* CHAT SCROLL AREA */}
+          {/* CHAT AREA */}
           <main className="flex-1 overflow-y-auto custom-scrollbar px-2 relative">
               <div className="flex flex-col items-center pb-32 pt-4">
                   {currentChat.messages.map((m, i) => <MessageItem key={i} role={m.role} content={m.content} image={m.image} isDark={isDark} />)}
@@ -372,14 +416,14 @@ export default function App() {
                   <div ref={bottomRef} />
               </div>
               
-              {/* FLOATING CONTACT BUTTON (FIXED BOTTOM RIGHT) */}
-              <a href={APP_INFO.wa_url} target="_blank" rel="noreferrer" className="fixed bottom-24 right-4 z-30 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-full shadow-lg hover:bg-green-700 hover:scale-105 transition-all animate-in slide-in-from-bottom-4 duration-500">
+              {/* FLOATING WA FIXED */}
+              <a href={APP_INFO.wa_url} target="_blank" rel="noreferrer" className="fixed bottom-24 right-4 z-[90] flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-full shadow-lg hover:bg-green-700 hover:scale-105 transition-all">
                   <MessageCircle size={18}/> <span className="text-sm font-bold">Hubungi Owner</span>
               </a>
           </main>
 
-          {/* INPUT FOOTER */}
-          <footer className={`p-3 md:p-4 z-40 ${isDark ? 'bg-[#212121]' : 'bg-white'}`}>
+          {/* INPUT */}
+          <footer className={`p-3 md:p-4 z-20 ${isDark ? 'bg-[#212121]' : 'bg-white'}`}>
               <div className="max-w-3xl mx-auto">
                   <form onSubmit={handleSend} className={`flex items-center gap-2 p-2 rounded-2xl border transition-all shadow-lg ${isDark ? 'bg-[#2f2f2f] border-gray-700 focus-within:border-gray-500' : 'bg-gray-50 border-gray-200 focus-within:border-blue-400'}`}>
                       <input id="imgUp" type="file" className="hidden" onChange={e => {if(e.target.files[0]){setImg(e.target.files[0]); setPreview(URL.createObjectURL(e.target.files[0])); setModel('nano')}}} />
@@ -387,7 +431,7 @@ export default function App() {
                       <input value={input} onChange={e=>setInput(e.target.value)} placeholder={model==='nano'?"Deskripsi gambar...":model==='worm'?"Tanya WormGPT...":"Ketik pesan..."} className="flex-1 bg-transparent outline-none text-sm min-w-0" disabled={loading} />
                       <button type="submit" disabled={loading} className="p-2 bg-indigo-600 rounded-xl text-white hover:bg-indigo-700 disabled:opacity-50 transition-colors"><Send size={18}/></button>
                   </form>
-                  <div className="text-center mt-2 text-[10px] opacity-40">Shanove AI v19 • {currEmail ? "Pro Mode" : "Guest Mode"}</div>
+                  <div className="text-center mt-2 text-[10px] opacity-40">Shanove AI v20 • {currEmail ? "Pro Mode" : "Guest Mode"}</div>
               </div>
           </footer>
       </div>
